@@ -9,7 +9,7 @@ class Transaction {
   final String title;
   final double amount;
   final DateTime date;
-  final bool isIncome; // true = Pourboire, false = Dépense
+  final bool isIncome;
   final String category;
 
   Transaction({
@@ -85,6 +85,23 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
     });
   }
 
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case 'Pourboire':
+        return Icons.volunteer_activism;
+      case 'Repas':
+        return Icons.restaurant;
+      case 'Transport':
+        return Icons.directions_bus;
+      case 'Café/Tabac':
+        return Icons.local_cafe;
+      case 'Achat Perso':
+        return Icons.shopping_bag;
+      default:
+        return Icons.attach_money;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -104,39 +121,48 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- CARTE DES SALAIRES ---
-            Card(
-              elevation: 3,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildSalaryItem('Salaire du 4', salary4th),
-                        Container(height: 35, width: 1, color: Colors.grey.shade300),
-                        _buildSalaryItem('Salaire du 14', salary14th),
-                      ],
-                    ),
-                    const Divider(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Total Salaires :', style: TextStyle(fontWeight: FontWeight.w600)),
-                        Text(
-                          '${totalSalary.toStringAsFixed(0)} DA',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal),
-                        ),
-                      ],
-                    ),
-                  ],
+            // --- GRAND TABLEAU DE BORD (SOLDE NET) ---
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF00695C), Color(0xFF00897B)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.teal.withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  const Text('SOLDE NET (RESTE À VIVRE)', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${netBalance.toStringAsFixed(0)} DA',
+                    style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                  ),
+                  const Divider(color: Colors.white24, height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildHeaderInfo('Salaires', '${totalSalary.toStringAsFixed(0)} DA'),
+                      _buildHeaderInfo('Pourboires', '+${totalTips.toStringAsFixed(0)} DA'),
+                      _buildHeaderInfo('Dépenses', '-${totalExpenses.toStringAsFixed(0)} DA'),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             // --- BOUTONS D'ACTION RAPIDE ---
             Row(
@@ -146,7 +172,9 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green.shade600,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.vertical: 14),
+                      padding: const EdgeInsets.vertical: 14,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
                     onPressed: () => _showAddTransactionDialog(isIncome: true),
                     icon: const Icon(Icons.add),
                     label: const Text('+ Pourboire'),
@@ -158,7 +186,9 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red.shade600,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.vertical: 14),
+                      padding: const EdgeInsets.vertical: 14,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
                     onPressed: () => _showAddTransactionDialog(isIncome: false),
                     icon: const Icon(Icons.remove),
                     label: const Text('- Dépense'),
@@ -166,50 +196,63 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
-            // --- APERÇU RAPIDE ---
-            Row(
-              children: [
-                Expanded(child: _buildSummaryCard('Pourboires', totalTips, Colors.green)),
-                const SizedBox(width: 12),
-                Expanded(child: _buildSummaryCard('Dépenses', totalExpenses, Colors.red)),
-              ],
+            // --- HISTORIQUE RÉCENT ---
+            const Text(
+              'Aperçu des Opérations',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black80),
             ),
+            const SizedBox(height: 10),
+
+            _transactions.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Text('Aucune opération enregistrée pour le moment.', style: TextStyle(color: Colors.grey.shade600)),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _transactions.length,
+                    itemBuilder: (ctx, index) {
+                      final tx = _transactions[index];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: tx.isIncome ? Colors.green.shade50 : Colors.red.shade50,
+                            child: Icon(_getCategoryIcon(tx.category), color: tx.isIncome ? Colors.green : Colors.red),
+                          ),
+                          title: Text(tx.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('${tx.category} • ${tx.date.day}/${tx.date.month} ${tx.date.hour}:${tx.date.minute.toString().padLeft(2, '0')}'),
+                          trailing: Text(
+                            '${tx.isIncome ? '+' : '-'}${tx.amount.toStringAsFixed(0)} DA',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: tx.isIncome ? Colors.green.shade700 : Colors.red.shade700,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSalaryItem(String title, double amount) {
+  Widget _buildHeaderInfo(String label, String value) {
     return Column(
       children: [
-        Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
         const SizedBox(height: 4),
-        Text('${amount.toStringAsFixed(0)} DA', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
       ],
-    );
-  }
-
-  Widget _buildSummaryCard(String title, double amount, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 4),
-          Text(
-            '${amount.toStringAsFixed(0)} DA',
-            style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-        ],
-      ),
     );
   }
 
