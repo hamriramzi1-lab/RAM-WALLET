@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const RamWalletApp());
@@ -20,6 +22,28 @@ class Transaction {
     required this.isIncome,
     required this.category,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'amount': amount,
+      'date': date.toIso8601String(),
+      'isIncome': isIncome,
+      'category': category,
+    };
+  }
+
+  factory Transaction.fromMap(Map<String, dynamic> map) {
+    return Transaction(
+      id: map['id'],
+      title: map['title'],
+      amount: map['amount'],
+      date: DateTime.parse(map['date']),
+      isIncome: map['isIncome'],
+      category: map['category'],
+    );
+  }
 }
 
 class RamWalletApp extends StatelessWidget {
@@ -50,8 +74,36 @@ class FinanceHomeScreen extends StatefulWidget {
 class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
   double salary4th = 0.0;
   double salary14th = 0.0;
+  List<Transaction> _transactions = [];
 
-  final List<Transaction> _transactions = [];
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      salary4th = prefs.getDouble('salary4th') ?? 0.0;
+      salary14th = prefs.getDouble('salary14th') ?? 0.0;
+
+      final String? txData = prefs.getString('transactions');
+      if (txData != null) {
+        final List<dynamic> decoded = json.decode(txData);
+        _transactions = decoded.map((item) => Transaction.fromMap(item)).toList();
+      }
+    });
+  }
+
+  Future<void> _saveData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('salary4th', salary4th);
+    await prefs.setDouble('salary14th', salary14th);
+
+    final List<Map<String, dynamic>> encoded = _transactions.map((tx) => tx.toMap()).toList();
+    await prefs.setString('transactions', json.encode(encoded));
+  }
 
   double get totalSalary => salary4th + salary14th;
 
@@ -83,12 +135,14 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         ),
       );
     });
+    _saveData();
   }
 
   void _deleteTransaction(String id) {
     setState(() {
       _transactions.removeWhere((tx) => tx.id == id);
     });
+    _saveData();
   }
 
   IconData _getCategoryIcon(String category) {
@@ -129,7 +183,6 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- GRAND TABLEAU DE BORD (SOLDE NET) ---
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -169,8 +222,6 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // --- BOUTONS D'ACTION RAPIDE ---
             Row(
               children: [
                 Expanded(
@@ -203,14 +254,11 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
               ],
             ),
             const SizedBox(height: 24),
-
-            // --- HISTORIQUE RÉCENT ET SUPPRESSION ---
             const Text(
               'Aperçu des Opérations',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black80),
             ),
             const SizedBox(height: 10),
-
             _transactions.isEmpty
                 ? Center(
                     child: Padding(
@@ -338,6 +386,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                 salary4th = double.tryParse(s4Controller.text) ?? 0.0;
                 salary14th = double.tryParse(s14Controller.text) ?? 0.0;
               });
+              _saveData();
               Navigator.pop(context);
             },
             child: const Text('Enregistrer'),
