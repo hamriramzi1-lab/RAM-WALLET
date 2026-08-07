@@ -4,6 +4,24 @@ void main() {
   runApp(const RamWalletApp());
 }
 
+class Transaction {
+  final String id;
+  final String title;
+  final double amount;
+  final DateTime date;
+  final bool isIncome; // true = Pourboire, false = Dépense
+  final String category;
+
+  Transaction({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.date,
+    required this.isIncome,
+    required this.category,
+  });
+}
+
 class RamWalletApp extends StatelessWidget {
   const RamWalletApp({super.key});
 
@@ -30,11 +48,42 @@ class FinanceHomeScreen extends StatefulWidget {
 }
 
 class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
-  // Config des salaires
   double salary4th = 0.0;
   double salary14th = 0.0;
 
+  final List<Transaction> _transactions = [];
+
   double get totalSalary => salary4th + salary14th;
+
+  double get totalTips {
+    return _transactions
+        .where((tx) => tx.isIncome)
+        .fold(0.0, (sum, item) => sum + item.amount);
+  }
+
+  double get totalExpenses {
+    return _transactions
+        .where((tx) => !tx.isIncome)
+        .fold(0.0, (sum, item) => sum + item.amount);
+  }
+
+  double get netBalance => (totalSalary + totalTips) - totalExpenses;
+
+  void _addTransaction(String title, double amount, bool isIncome, String category) {
+    setState(() {
+      _transactions.insert(
+        0,
+        Transaction(
+          id: DateTime.now().toString(),
+          title: title.isEmpty ? (isIncome ? 'Pourboire' : 'Dépense') : title,
+          amount: amount,
+          date: DateTime.now(),
+          isIncome: isIncome,
+          category: category,
+        ),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,47 +107,28 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
           children: [
             // --- CARTE DES SALAIRES ---
             Card(
-              elevation: 4,
+              elevation: 3,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.account_balance_wallet, color: Colors.teal),
-                        SizedBox(width: 8),
-                        Text(
-                          'Configuration des Salaires',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         _buildSalaryItem('Salaire du 4', salary4th),
-                        Container(height: 40, width: 1, color: Colors.grey.shade300),
+                        Container(height: 35, width: 1, color: Colors.grey.shade300),
                         _buildSalaryItem('Salaire du 14', salary14th),
                       ],
                     ),
-                    const Divider(height: 24),
+                    const Divider(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Total Salaires :',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
+                        const Text('Total Salaires :', style: TextStyle(fontWeight: FontWeight.w600)),
                         Text(
                           '${totalSalary.toStringAsFixed(0)} DA',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.teal,
-                          ),
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal),
                         ),
                       ],
                     ),
@@ -106,28 +136,45 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            
-            // Indication pour la suite
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.teal.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.teal.shade200),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.teal),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Étape 1 de RAM WALLET prête ! Clique sur l\'engrenage en haut à droite pour définir tes deux salaires.',
-                      style: TextStyle(fontSize: 13, color: Colors.teal),
-                    ),
+            const SizedBox(height: 16),
+
+            // --- BOUTONS D'ACTION RAPIDE ---
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.vertical: 14),
+                    onPressed: () => _showAddTransactionDialog(isIncome: true),
+                    icon: const Icon(Icons.add),
+                    label: const Text('+ Pourboire'),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.vertical: 14),
+                    onPressed: () => _showAddTransactionDialog(isIncome: false),
+                    icon: const Icon(Icons.remove),
+                    label: const Text('- Dépense'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // --- APERÇU RAPIDE ---
+            Row(
+              children: [
+                Expanded(child: _buildSummaryCard('Pourboires', totalTips, Colors.green)),
+                const SizedBox(width: 12),
+                Expanded(child: _buildSummaryCard('Dépenses', totalExpenses, Colors.red)),
+              ],
             ),
           ],
         ),
@@ -138,13 +185,31 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
   Widget _buildSalaryItem(String title, double amount) {
     return Column(
       children: [
-        Text(title, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+        Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         const SizedBox(height: 4),
-        Text(
-          '${amount.toStringAsFixed(0)} DA',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
+        Text('${amount.toStringAsFixed(0)} DA', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
       ],
+    );
+  }
+
+  Widget _buildSummaryCard(String title, double amount, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13)),
+          const SizedBox(height: 4),
+          Text(
+            '${amount.toStringAsFixed(0)} DA',
+            style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ],
+      ),
     );
   }
 
@@ -162,27 +227,18 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
             TextField(
               controller: s4Controller,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Salaire du 4 du mois (DA)',
-                prefixIcon: Icon(Icons.calendar_today),
-              ),
+              decoration: const InputDecoration(labelText: 'Salaire du 4 du mois (DA)'),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: s14Controller,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Salaire du 14 du mois (DA)',
-                prefixIcon: Icon(Icons.event_available),
-              ),
+              decoration: const InputDecoration(labelText: 'Salaire du 14 du mois (DA)'),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
           ElevatedButton(
             onPressed: () {
               setState(() {
@@ -194,6 +250,65 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
             child: const Text('Enregistrer'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showAddTransactionDialog({required bool isIncome}) {
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+    String selectedCategory = isIncome ? 'Pourboire' : 'Repas';
+
+    final categories = isIncome
+        ? ['Pourboire', 'Autre']
+        : ['Repas', 'Transport', 'Café/Tabac', 'Achat Perso', 'Autre'];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(isIncome ? 'Ajouter un Pourboire' : 'Ajouter une Dépense'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Montant (DA)', prefixIcon: Icon(Icons.attach_money)),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteController,
+                decoration: const InputDecoration(labelText: 'Note (ex: Chambre 102)', prefixIcon: Icon(Icons.note)),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedCategory,
+                items: categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                onChanged: (val) => setDialogState(() => selectedCategory = val!),
+                decoration: const InputDecoration(labelText: 'Catégorie'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isIncome ? Colors.green : Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                final amount = double.tryParse(amountController.text) ?? 0.0;
+                if (amount > 0) {
+                  _addTransaction(noteController.text.trim(), amount, isIncome, selectedCategory);
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Ajouter'),
+            ),
+          ],
+        ),
       ),
     );
   }
