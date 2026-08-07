@@ -85,6 +85,12 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
     });
   }
 
+  void _deleteTransaction(String id) {
+    setState(() {
+      _transactions.removeWhere((tx) => tx.id == id);
+    });
+  }
+
   IconData _getCategoryIcon(String category) {
     switch (category) {
       case 'Pourboire':
@@ -198,7 +204,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
             ),
             const SizedBox(height: 24),
 
-            // --- HISTORIQUE RÉCENT ---
+            // --- HISTORIQUE RÉCENT ET SUPPRESSION ---
             const Text(
               'Aperçu des Opérations',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black80),
@@ -218,22 +224,45 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                     itemCount: _transactions.length,
                     itemBuilder: (ctx, index) {
                       final tx = _transactions[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: tx.isIncome ? Colors.green.shade50 : Colors.red.shade50,
-                            child: Icon(_getCategoryIcon(tx.category), color: tx.isIncome ? Colors.green : Colors.red),
-                          ),
-                          title: Text(tx.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('${tx.category} • ${tx.date.day}/${tx.date.month} ${tx.date.hour}:${tx.date.minute.toString().padLeft(2, '0')}'),
-                          trailing: Text(
-                            '${tx.isIncome ? '+' : '-'}${tx.amount.toStringAsFixed(0)} DA',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                              color: tx.isIncome ? Colors.green.shade700 : Colors.red.shade700,
+                      return Dismissible(
+                        key: Key(tx.id),
+                        background: Container(
+                          color: Colors.red,
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: const Icon(Icons.delete, color: Colors.white),
+                        ),
+                        direction: DismissDirection.endToStart,
+                        onDismissed: (direction) {
+                          _deleteTransaction(tx.id);
+                        },
+                        child: Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: tx.isIncome ? Colors.green.shade50 : Colors.red.shade50,
+                              child: Icon(_getCategoryIcon(tx.category), color: tx.isIncome ? Colors.green : Colors.red),
+                            ),
+                            title: Text(tx.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text('${tx.category} • ${tx.date.day}/${tx.date.month} ${tx.date.hour}:${tx.date.minute.toString().padLeft(2, '0')}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${tx.isIncome ? '+' : '-'}${tx.amount.toStringAsFixed(0)} DA',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: tx.isIncome ? Colors.green.shade700 : Colors.red.shade700,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.grey),
+                                  onPressed: () => _confirmDeleteDialog(tx.id),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -253,6 +282,27 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         const SizedBox(height: 4),
         Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
       ],
+    );
+  }
+
+  void _confirmDeleteDialog(String id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer l\'opération'),
+        content: const Text('Voulez-vous vraiment effacer cette ligne ?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () {
+              _deleteTransaction(id);
+              Navigator.pop(context);
+            },
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
     );
   }
 
