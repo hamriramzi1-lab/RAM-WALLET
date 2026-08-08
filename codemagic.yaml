@@ -5,10 +5,14 @@ workflows:
     environment:
       flutter: stable
     scripts:
-      - name: Clean and rebuild
+      - name: Clean everything
         script: |
-          flutter clean
+          rm -rf android/
+          rm -rf ios/
+          rm -rf build/
+          flutter create --platforms=android --org=com.ram .
           flutter pub get
-          flutter build apk --release
+      - name: Build Android APK
+        script: flutter build apk --release
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
