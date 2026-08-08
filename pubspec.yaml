@@ -1,7 +1,7 @@
 name: ram_wallet
-description: "Application de gestion de budget, pourboires et statistiques"
+description: "Application de gestion de budget, pourboires, statistiques et dettes"
 publish_to: 'none'
-version: 2.0.0+1
+version: 3.0.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
