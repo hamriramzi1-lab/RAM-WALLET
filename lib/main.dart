@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 
 void main() {
   runApp(const RamWalletApp());
@@ -75,6 +77,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
   double salary4th = 0.0;
   double salary14th = 0.0;
   List<Transaction> _transactions = [];
+  int _selectedYear = DateTime.now().year;
 
   @override
   void initState() {
@@ -121,19 +124,20 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
 
   double get netBalance => (totalSalary + totalTips) - totalExpenses;
 
-  void _addTransaction(String title, double amount, bool isIncome, String category) {
+  void _addTransaction(String title, double amount, bool isIncome, String category, DateTime customDate) {
     setState(() {
       _transactions.insert(
         0,
         Transaction(
-          id: DateTime.now().toString(),
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
           title: title.isEmpty ? (isIncome ? 'Pourboire' : 'Dépense') : title,
           amount: amount,
-          date: DateTime.now(),
+          date: customDate,
           isIncome: isIncome,
           category: category,
         ),
       );
+      _transactions.sort((a, b) => b.date.compareTo(a.date));
     });
     _saveData();
   }
@@ -162,6 +166,21 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
     }
   }
 
+  Color _getCategoryColor(String category) {
+    switch (category) {
+      case 'Repas':
+        return Colors.orange;
+      case 'Transport':
+        return Colors.blue;
+      case 'Café/Tabac':
+        return Colors.brown;
+      case 'Achat Perso':
+        return Colors.purple;
+      default:
+        return Colors.redAccent;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -171,6 +190,11 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            onPressed: _showStatsAndAnnualReportModal,
+            tooltip: 'Statistiques & Bilan Annuel',
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: _showSalarySettingsDialog,
@@ -183,6 +207,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Carte Solde Net
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -222,6 +247,8 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
               ),
             ),
             const SizedBox(height: 20),
+
+            // Boutons d'ajout
             Row(
               children: [
                 Expanded(
@@ -254,6 +281,8 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
               ],
             ),
             const SizedBox(height: 24),
+
+            // Liste des opérations
             const Text(
               'Aperçu des Opérations',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black80),
@@ -294,7 +323,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                               child: Icon(_getCategoryIcon(tx.category), color: tx.isIncome ? Colors.green : Colors.red),
                             ),
                             title: Text(tx.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('${tx.category} • ${tx.date.day}/${tx.date.month} ${tx.date.hour}:${tx.date.minute.toString().padLeft(2, '0')}'),
+                            subtitle: Text('${tx.category} • ${tx.date.day}/${tx.date.month}/${tx.date.year} ${tx.date.hour}:${tx.date.minute.toString().padLeft(2, '0')}'),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -330,6 +359,236 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         const SizedBox(height: 4),
         Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
       ],
+    );
+  }
+
+  // --- Modal Statistiques & Bilan Annuel ---
+  void _showStatsAndAnnualReportModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final annualTx = _transactions.where((tx) => tx.date.year == _selectedYear).toList();
+            final annualTips = annualTx.where((tx) => tx.isIncome).fold(0.0, (sum, tx) => sum + tx.amount);
+            final annualExpenses = annualTx.where((tx) => !tx.isIncome).fold(0.0, (sum, tx) => sum + tx.amount);
+            final annualSalaryTotal = totalSalary * 12; // 12 mois de salaire
+            final annualNet = (annualSalaryTotal + annualTips) - annualExpenses;
+
+            // Calcul par catégories de dépense
+            Map<String, double> categoryTotals = {};
+            for (var tx in annualTx.where((tx) => !tx.isIncome)) {
+              categoryTotals[tx.category] = (categoryTotals[tx.category] ?? 0.0) + tx.amount;
+            }
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Statistiques & Bilan',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal),
+                      ),
+                      DropdownButton<int>(
+                        value: _selectedYear,
+                        items: [2024, 2025, 2026, 2027].map((y) {
+                          return DropdownMenuItem(value: y, child: Text('$y'));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setModalState(() => _selectedYear = val);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 10),
+                          Text('Bilan Annuel $_selectedYear', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.shade50,
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildReportRow('Salaires Annuels (Estimés)', '${annualSalaryTotal.toStringAsFixed(0)} DA', Colors.black),
+                                const SizedBox(height: 6),
+                                _buildReportRow('Total Pourboires', '+${annualTips.toStringAsFixed(0)} DA', Colors.green.shade700),
+                                const SizedBox(height: 6),
+                                _buildReportRow('Total Dépenses', '-${annualExpenses.toStringAsFixed(0)} DA', Colors.red.shade700),
+                                const Divider(height: 16),
+                                _buildReportRow('Bilan Annuel Net', '${annualNet.toStringAsFixed(0)} DA', Colors.teal.shade900, isBold: true),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 25),
+                          const Text('Répartition des Dépenses', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 15),
+
+                          categoryTotals.isEmpty
+                              ? const Center(padding: EdgeInsets.all(20), child: Text('Aucune dépense enregistrée cette année.'))
+                              : SizedBox(
+                                  height: 200,
+                                  child: PieChart(
+                                    PieChartData(
+                                      sectionsSpace: 2,
+                                      centerSpaceRadius: 40,
+                                      sections: categoryTotals.entries.map((entry) {
+                                        return PieChartSectionData(
+                                          color: _getCategoryColor(entry.key),
+                                          value: entry.value,
+                                          title: '${((entry.value / (annualExpenses > 0 ? annualExpenses : 1)) * 100).toStringAsFixed(0)}%',
+                                          radius: 50,
+                                          titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ),
+                          const SizedBox(height: 15),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: categoryTotals.keys.map((cat) {
+                              return Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(width: 12, height: 12, color: _getCategoryColor(cat)),
+                                  const SizedBox(width: 6),
+                                  Text('$cat (${categoryTotals[cat]!.toStringAsFixed(0)} DA)', style: const TextStyle(fontSize: 12)),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildReportRow(String title, String amount, Color color, {bool isBold = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(title, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
+        Text(amount, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.w600, color: color, fontSize: 14)),
+      ],
+    );
+  }
+
+  // --- Dialogue Ajout Transaction (avec option "Somme Oubliée" / Date Personnalisée) ---
+  void _showAddTransactionDialog({required bool isIncome}) {
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+    String selectedCategory = isIncome ? 'Pourboire' : 'Repas';
+    DateTime selectedDate = DateTime.now();
+
+    final categories = isIncome
+        ? ['Pourboire', 'Autre']
+        : ['Repas', 'Transport', 'Café/Tabac', 'Achat Perso', 'Autre'];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(isIncome ? 'Ajouter un Pourboire' : 'Ajouter une Dépense'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: amountController,
+                  keyboardType: TextInputType.number,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'Montant (DA)', prefixIcon: Icon(Icons.attach_money)),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: noteController,
+                  decoration: const InputDecoration(labelText: 'Note (ex: Oubli hier)', prefixIcon: Icon(Icons.note)),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  items: categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                  onChanged: (val) => setDialogState(() => selectedCategory = val!),
+                  decoration: const InputDecoration(labelText: 'Catégorie'),
+                ),
+                const SizedBox(height: 12),
+                // Sélection de la date (Somme oubliée)
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 20, color: Colors.teal),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Date : ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => selectedDate = picked);
+                        }
+                      },
+                      child: const Text('Modifier'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isIncome ? Colors.green : Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                final amount = double.tryParse(amountController.text) ?? 0.0;
+                if (amount > 0) {
+                  _addTransaction(noteController.text.trim(), amount, isIncome, selectedCategory, selectedDate);
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Ajouter'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -392,65 +651,6 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
             child: const Text('Enregistrer'),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showAddTransactionDialog({required bool isIncome}) {
-    final amountController = TextEditingController();
-    final noteController = TextEditingController();
-    String selectedCategory = isIncome ? 'Pourboire' : 'Repas';
-
-    final categories = isIncome
-        ? ['Pourboire', 'Autre']
-        : ['Repas', 'Transport', 'Café/Tabac', 'Achat Perso', 'Autre'];
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(isIncome ? 'Ajouter un Pourboire' : 'Ajouter une Dépense'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Montant (DA)', prefixIcon: Icon(Icons.attach_money)),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: noteController,
-                decoration: const InputDecoration(labelText: 'Note (ex: Chambre 102)', prefixIcon: Icon(Icons.note)),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: selectedCategory,
-                items: categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                onChanged: (val) => setDialogState(() => selectedCategory = val!),
-                decoration: const InputDecoration(labelText: 'Catégorie'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isIncome ? Colors.green : Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                final amount = double.tryParse(amountController.text) ?? 0.0;
-                if (amount > 0) {
-                  _addTransaction(noteController.text.trim(), amount, isIncome, selectedCategory);
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Ajouter'),
-            ),
-          ],
-        ),
       ),
     );
   }
