@@ -1,25 +1,16 @@
-// lib/services/storage_service.dart
-// Ce fichier gère la sauvegarde et le chargement des données
-
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/transaction.dart';
 import '../models/debt.dart';
 
 class StorageService {
-  // Instance unique (patron Singleton)
   static final StorageService _instance = StorageService._internal();
   factory StorageService() => _instance;
   StorageService._internal();
 
-  // Clés pour le stockage
   static const String TRANSACTIONS_KEY = 'transactions';
   static const String DEBTS_KEY = 'debts';
   static const String SALARY_KEY = 'salary_data';
-
-  // ==========================================
-  // SAUVEGARDER LES DONNÉES
-  // ==========================================
 
   Future<void> saveTransactions(List<Transaction> transactions) async {
     final prefs = await SharedPreferences.getInstance();
@@ -37,10 +28,6 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(SALARY_KEY, jsonEncode(salaryData));
   }
-
-  // ==========================================
-  // CHARGER LES DONNÉES
-  // ==========================================
 
   Future<List<Transaction>> loadTransactions() async {
     try {
@@ -82,11 +69,6 @@ class StorageService {
     }
   }
 
-  // ==========================================
-  // CALCULS
-  // ==========================================
-
-  // Calculer le solde total
   double calculateBalance(List<Transaction> transactions) {
     double balance = 0.0;
     for (var tx in transactions) {
@@ -99,7 +81,6 @@ class StorageService {
     return balance;
   }
 
-  // Calculer le total des dettes
   double calculateTotalDebts(List<Debt> debts) {
     double total = 0.0;
     for (var debt in debts) {
