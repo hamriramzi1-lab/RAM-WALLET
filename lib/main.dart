@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:intl/intl.dart';
 
 void main() {
   runApp(const RamWalletApp());
@@ -25,27 +24,58 @@ class Transaction {
     required this.category,
   });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'title': title,
-      'amount': amount,
-      'date': date.toIso8601String(),
-      'isIncome': isIncome,
-      'category': category,
-    };
-  }
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'title': title,
+        'amount': amount,
+        'date': date.toIso8601String(),
+        'isIncome': isIncome,
+        'category': category,
+      };
 
-  factory Transaction.fromMap(Map<String, dynamic> map) {
-    return Transaction(
-      id: map['id'],
-      title: map['title'],
-      amount: map['amount'],
-      date: DateTime.parse(map['date']),
-      isIncome: map['isIncome'],
-      category: map['category'],
-    );
-  }
+  factory Transaction.fromMap(Map<String, dynamic> map) => Transaction(
+        id: map['id'],
+        title: map['title'],
+        amount: map['amount'],
+        date: DateTime.parse(map['date']),
+        isIncome: map['isIncome'],
+        category: map['category'],
+      );
+}
+
+class Debt {
+  final String id;
+  final String personName;
+  final double totalAmount;
+  double paidAmount;
+  final bool isIwe; // true = Je dois à quelqu'un / false = On me doit
+
+  Debt({
+    required this.id,
+    required this.personName,
+    required this.totalAmount,
+    this.paidAmount = 0.0,
+    required this.isIwe,
+  });
+
+  double get remainingAmount => totalAmount - paidAmount;
+  bool get isCleared => remainingAmount <= 0;
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'personName': personName,
+        'totalAmount': totalAmount,
+        'paidAmount': paidAmount,
+        'isIwe': isIwe,
+      };
+
+  factory Debt.fromMap(Map<String, dynamic> map) => Debt(
+        id: map['id'],
+        personName: map['personName'],
+        totalAmount: map['totalAmount'],
+        paidAmount: map['paidAmount'] ?? 0.0,
+        isIwe: map['isIwe'],
+      );
 }
 
 class RamWalletApp extends StatelessWidget {
@@ -77,6 +107,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
   double salary4th = 0.0;
   double salary14th = 0.0;
   List<Transaction> _transactions = [];
+  List<Debt> _debts = [];
   int _selectedYear = DateTime.now().year;
 
   @override
@@ -96,6 +127,12 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         final List<dynamic> decoded = json.decode(txData);
         _transactions = decoded.map((item) => Transaction.fromMap(item)).toList();
       }
+
+      final String? debtData = prefs.getString('debts');
+      if (debtData != null) {
+        final List<dynamic> decodedDebts = json.decode(debtData);
+        _debts = decodedDebts.map((item) => Debt.fromMap(item)).toList();
+      }
     });
   }
 
@@ -104,8 +141,11 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
     await prefs.setDouble('salary4th', salary4th);
     await prefs.setDouble('salary14th', salary14th);
 
-    final List<Map<String, dynamic>> encoded = _transactions.map((tx) => tx.toMap()).toList();
-    await prefs.setString('transactions', json.encode(encoded));
+    final List<Map<String, dynamic>> encodedTx = _transactions.map((tx) => tx.toMap()).toList();
+    await prefs.setString('transactions', json.encode(encodedTx));
+
+    final List<Map<String, dynamic>> encodedDebts = _debts.map((d) => d.toMap()).toList();
+    await prefs.setString('debts', json.encode(encodedDebts));
   }
 
   double get totalSalary => salary4th + salary14th;
@@ -149,6 +189,38 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
     _saveData();
   }
 
+  void _addDebt(String name, double amount, bool isIwe) {
+    setState(() {
+      _debts.add(Debt(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        personName: name,
+        totalAmount: amount,
+        isIwe: isIwe,
+      ));
+    });
+    _saveData();
+  }
+
+  void _payDebt(Debt debt, double payAmount) {
+    if (payAmount <= 0) return;
+    setState(() {
+      debt.paidAmount += payAmount;
+      // Enregistrer le règlement comme transaction budget
+      _transactions.insert(
+        0,
+        Transaction(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          title: debt.isIwe ? 'Règlement Dette : ${debt.personName}' : 'Remboursement de : ${debt.personName}',
+          amount: payAmount,
+          date: DateTime.now(),
+          isIncome: !debt.isIwe, // Si on me rembourse = Entrée d'argent
+          category: 'Dette/Règlement',
+        ),
+      );
+    });
+    _saveData();
+  }
+
   IconData _getCategoryIcon(String category) {
     switch (category) {
       case 'Pourboire':
@@ -161,6 +233,8 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         return Icons.local_cafe;
       case 'Achat Perso':
         return Icons.shopping_bag;
+      case 'Dette/Règlement':
+        return Icons.account_balance_wallet;
       default:
         return Icons.attach_money;
     }
@@ -176,6 +250,8 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         return Colors.brown;
       case 'Achat Perso':
         return Colors.purple;
+      case 'Dette/Règlement':
+        return Colors.teal;
       default:
         return Colors.redAccent;
     }
@@ -190,6 +266,11 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.menu_book),
+            onPressed: _showDebtsModal,
+            tooltip: 'Gestion des Dettes',
+          ),
           IconButton(
             icon: const Icon(Icons.bar_chart),
             onPressed: _showStatsAndAnnualReportModal,
@@ -207,7 +288,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Carte Solde Net
+            // Solde Net
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -248,7 +329,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Boutons d'ajout
+            // Actions d'ajout
             Row(
               children: [
                 Expanded(
@@ -282,7 +363,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Liste des opérations
+            // Liste opérations
             const Text(
               'Aperçu des Opérations',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black80),
@@ -311,9 +392,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                           child: const Icon(Icons.delete, color: Colors.white),
                         ),
                         direction: DismissDirection.endToStart,
-                        onDismissed: (direction) {
-                          _deleteTransaction(tx.id);
-                        },
+                        onDismissed: (direction) => _deleteTransaction(tx.id),
                         child: Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -362,25 +441,211 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
     );
   }
 
+  // --- Modal Gestion des Dettes ---
+  void _showDebtsModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Gestion des Dettes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal)),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                        onPressed: () {
+                          _showAddDebtDialog(() => setModalState(() {}));
+                        },
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Nouvelle Dette'),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  Expanded(
+                    child: _debts.isEmpty
+                        ? const Center(child: Text('Aucune dette enregistrée.'))
+                        : ListView.builder(
+                            itemCount: _debts.length,
+                            itemBuilder: (context, index) {
+                              final debt = _debts[index];
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(debt.personName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                          Chip(
+                                            label: Text(debt.isIwe ? 'Je dois' : 'On me doit', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                                            backgroundColor: debt.isIwe ? Colors.red.shade400 : Colors.green.shade400,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text('Total: ${debt.totalAmount.toStringAsFixed(0)} DA | Payé: ${debt.paidAmount.toStringAsFixed(0)} DA'),
+                                      const SizedBox(height: 4),
+                                      Text('Reste à régler: ${debt.remainingAmount.toStringAsFixed(0)} DA', style: TextStyle(fontWeight: FontWeight.bold, color: debt.isCleared ? Colors.green : Colors.red.shade700)),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          if (!debt.isCleared)
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                                              onPressed: () {
+                                                _showPayDebtDialog(debt, () => setModalState(() {}));
+                                              },
+                                              child: const Text('Régler / Payer'),
+                                            ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete, color: Colors.grey),
+                                            onPressed: () {
+                                              setState(() => _debts.removeAt(index));
+                                              _saveData();
+                                              setModalState(() {});
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showAddDebtDialog(VoidCallback onUpdate) {
+    final nameController = TextEditingController();
+    final amountController = TextEditingController();
+    bool isIwe = true;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Ajouter une Dette / Créance'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Nom de la personne')),
+              const SizedBox(height: 8),
+              TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Montant Total (DA)')),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  ChoiceChip(
+                    label: const Text('Je dois'),
+                    selected: isIwe,
+                    onSelected: (val) => setDialogState(() => isIwe = true),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('On me doit'),
+                    selected: !isIwe,
+                    onSelected: (val) => setDialogState(() => isIwe = false),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
+            ElevatedButton(
+              onPressed: () {
+                final amt = double.tryParse(amountController.text) ?? 0.0;
+                if (nameController.text.isNotEmpty && amt > 0) {
+                  _addDebt(nameController.text.trim(), amt, isIwe);
+                  onUpdate();
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Ajouter'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPayDebtDialog(Debt debt, VoidCallback onUpdate) {
+    final payController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Règlement pour ${debt.personName}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Reste à régler: ${debt.remainingAmount.toStringAsFixed(0)} DA'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: payController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Montant versé aujourd\'hui (DA)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
+          ElevatedButton(
+            onPressed: () {
+              final amt = double.tryParse(payController.text) ?? 0.0;
+              if (amt > 0) {
+                _payDebt(debt, amt);
+                onUpdate();
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Valider le Règlement'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- Modal Statistiques & Bilan Annuel ---
   void _showStatsAndAnnualReportModal() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final annualTx = _transactions.where((tx) => tx.date.year == _selectedYear).toList();
             final annualTips = annualTx.where((tx) => tx.isIncome).fold(0.0, (sum, tx) => sum + tx.amount);
             final annualExpenses = annualTx.where((tx) => !tx.isIncome).fold(0.0, (sum, tx) => sum + tx.amount);
-            final annualSalaryTotal = totalSalary * 12; // 12 mois de salaire
+            final annualSalaryTotal = totalSalary * 12;
             final annualNet = (annualSalaryTotal + annualTips) - annualExpenses;
 
-            // Calcul par catégories de dépense
             Map<String, double> categoryTotals = {};
             for (var tx in annualTx.where((tx) => !tx.isIncome)) {
               categoryTotals[tx.category] = (categoryTotals[tx.category] ?? 0.0) + tx.amount;
@@ -395,19 +660,12 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Statistiques & Bilan',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal),
-                      ),
+                      const Text('Statistiques & Bilan', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal)),
                       DropdownButton<int>(
                         value: _selectedYear,
-                        items: [2024, 2025, 2026, 2027].map((y) {
-                          return DropdownMenuItem(value: y, child: Text('$y'));
-                        }).toList(),
+                        items: [2024, 2025, 2026, 2027].map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
                         onChanged: (val) {
-                          if (val != null) {
-                            setModalState(() => _selectedYear = val);
-                          }
+                          if (val != null) setModalState(() => _selectedYear = val);
                         },
                       ),
                     ],
@@ -423,10 +681,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                           const SizedBox(height: 10),
                           Container(
                             padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.teal.shade50,
-                              borderRadius: BorderRadius.circular(15),
-                            ),
+                            decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(15)),
                             child: Column(
                               children: [
                                 _buildReportRow('Salaires Annuels (Estimés)', '${annualSalaryTotal.toStringAsFixed(0)} DA', Colors.black),
@@ -442,7 +697,6 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                           const SizedBox(height: 25),
                           const Text('Répartition des Dépenses', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 15),
-
                           categoryTotals.isEmpty
                               ? const Center(padding: EdgeInsets.all(20), child: Text('Aucune dépense enregistrée cette année.'))
                               : SizedBox(
@@ -501,7 +755,6 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
     );
   }
 
-  // --- Dialogue Ajout Transaction (avec option "Somme Oubliée" / Date Personnalisée) ---
   void _showAddTransactionDialog({required bool isIncome}) {
     final amountController = TextEditingController();
     final noteController = TextEditingController();
@@ -540,17 +793,11 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                   decoration: const InputDecoration(labelText: 'Catégorie'),
                 ),
                 const SizedBox(height: 12),
-                // Sélection de la date (Somme oubliée)
                 Row(
                   children: [
                     const Icon(Icons.calendar_today, size: 20, color: Colors.teal),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Date : ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
+                    Expanded(child: Text('Date : ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}', style: const TextStyle(fontSize: 13))),
                     TextButton(
                       onPressed: () async {
                         final picked = await showDatePicker(
@@ -559,9 +806,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
                           firstDate: DateTime(2020),
                           lastDate: DateTime.now(),
                         );
-                        if (picked != null) {
-                          setDialogState(() => selectedDate = picked);
-                        }
+                        if (picked != null) setDialogState(() => selectedDate = picked);
                       },
                       child: const Text('Modifier'),
                     ),
@@ -573,10 +818,7 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isIncome ? Colors.green : Colors.red,
-                foregroundColor: Colors.white,
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: isIncome ? Colors.green : Colors.red, foregroundColor: Colors.white),
               onPressed: () {
                 final amount = double.tryParse(amountController.text) ?? 0.0;
                 if (amount > 0) {
@@ -624,17 +866,9 @@ class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: s4Controller,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Salaire du 4 du mois (DA)'),
-            ),
+            TextField(controller: s4Controller, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Salaire du 4 du mois (DA)')),
             const SizedBox(height: 12),
-            TextField(
-              controller: s14Controller,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Salaire du 14 du mois (DA)'),
-            ),
+            TextField(controller: s14Controller, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Salaire du 14 du mois (DA)')),
           ],
         ),
         actions: [
