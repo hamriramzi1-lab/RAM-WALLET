@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,18 +24,14 @@ jobs:
           flutter-version: '3.19.x'
           channel: 'stable'
 
-      - name: Generate Android project structure
-        run: flutter create . --platforms=android --project-name=ram_wallet
-
       - name: Get dependencies
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --debug
+        run: flutter build apk --release
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ram-wallet-app
-          path: build/app/outputs/flutter-apk/app-debug.apk
-          
+          path: build/app/outputs/flutter-apk/app-release.apk
