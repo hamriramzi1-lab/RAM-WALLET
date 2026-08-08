@@ -1,81 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:fl_chart/fl_chart.dart';
 
 void main() {
   runApp(const RamWalletApp());
-}
-
-class Transaction {
-  final String id;
-  final String title;
-  final double amount;
-  final DateTime date;
-  final bool isIncome;
-  final String category;
-
-  Transaction({
-    required this.id,
-    required this.title,
-    required this.amount,
-    required this.date,
-    required this.isIncome,
-    required this.category,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'title': title,
-        'amount': amount,
-        'date': date.toIso8601String(),
-        'isIncome': isIncome,
-        'category': category,
-      };
-
-  factory Transaction.fromMap(Map<String, dynamic> map) => Transaction(
-        id: map['id'],
-        title: map['title'],
-        amount: map['amount'],
-        date: DateTime.parse(map['date']),
-        isIncome: map['isIncome'],
-        category: map['category'],
-      );
-}
-
-class Debt {
-  final String id;
-  final String personName;
-  final double totalAmount;
-  double paidAmount;
-  final bool isIwe; // true = Je dois à quelqu'un / false = On me doit
-
-  Debt({
-    required this.id,
-    required this.personName,
-    required this.totalAmount,
-    this.paidAmount = 0.0,
-    required this.isIwe,
-  });
-
-  double get remainingAmount => totalAmount - paidAmount;
-  bool get isCleared => remainingAmount <= 0;
-
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'personName': personName,
-        'totalAmount': totalAmount,
-        'paidAmount': paidAmount,
-        'isIwe': isIwe,
-      };
-
-  factory Debt.fromMap(Map<String, dynamic> map) => Debt(
-        id: map['id'],
-        personName: map['personName'],
-        totalAmount: map['totalAmount'],
-        paidAmount: map['paidAmount'] ?? 0.0,
-        isIwe: map['isIwe'],
-      );
 }
 
 class RamWalletApp extends StatelessWidget {
@@ -84,808 +10,184 @@ class RamWalletApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'RAM WALLET',
+      title: 'RAM Wallet',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.teal,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF5F7FA),
       ),
-      home: const FinanceHomeScreen(),
+      home: const WalletHomePage(),
     );
   }
 }
 
-class FinanceHomeScreen extends StatefulWidget {
-  const FinanceHomeScreen({super.key});
+class WalletHomePage extends StatefulWidget {
+  const WalletHomePage({super.key});
 
   @override
-  State<FinanceHomeScreen> createState() => _FinanceHomeScreenState();
+  State<WalletHomePage> createState() => _WalletHomePageState();
 }
 
-class _FinanceHomeScreenState extends State<FinanceHomeScreen> {
-  double salary4th = 0.0;
-  double salary14th = 0.0;
-  List<Transaction> _transactions = [];
-  List<Debt> _debts = [];
-  int _selectedYear = DateTime.now().year;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      salary4th = prefs.getDouble('salary4th') ?? 0.0;
-      salary14th = prefs.getDouble('salary14th') ?? 0.0;
-
-      final String? txData = prefs.getString('transactions');
-      if (txData != null) {
-        final List<dynamic> decoded = json.decode(txData);
-        _transactions = decoded.map((item) => Transaction.fromMap(item)).toList();
-      }
-
-      final String? debtData = prefs.getString('debts');
-      if (debtData != null) {
-        final List<dynamic> decodedDebts = json.decode(debtData);
-        _debts = decodedDebts.map((item) => Debt.fromMap(item)).toList();
-      }
-    });
-  }
-
-  Future<void> _saveData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('salary4th', salary4th);
-    await prefs.setDouble('salary14th', salary14th);
-
-    final List<Map<String, dynamic>> encodedTx = _transactions.map((tx) => tx.toMap()).toList();
-    await prefs.setString('transactions', json.encode(encodedTx));
-
-    final List<Map<String, dynamic>> encodedDebts = _debts.map((d) => d.toMap()).toList();
-    await prefs.setString('debts', json.encode(encodedDebts));
-  }
-
-  double get totalSalary => salary4th + salary14th;
-
-  double get totalTips {
-    return _transactions
-        .where((tx) => tx.isIncome)
-        .fold(0.0, (sum, item) => sum + item.amount);
-  }
-
-  double get totalExpenses {
-    return _transactions
-        .where((tx) => !tx.isIncome)
-        .fold(0.0, (sum, item) => sum + item.amount);
-  }
-
-  double get netBalance => (totalSalary + totalTips) - totalExpenses;
-
-  void _addTransaction(String title, double amount, bool isIncome, String category, DateTime customDate) {
-    setState(() {
-      _transactions.insert(
-        0,
-        Transaction(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          title: title.isEmpty ? (isIncome ? 'Pourboire' : 'Dépense') : title,
-          amount: amount,
-          date: customDate,
-          isIncome: isIncome,
-          category: category,
-        ),
-      );
-      _transactions.sort((a, b) => b.date.compareTo(a.date));
-    });
-    _saveData();
-  }
-
-  void _deleteTransaction(String id) {
-    setState(() {
-      _transactions.removeWhere((tx) => tx.id == id);
-    });
-    _saveData();
-  }
-
-  void _addDebt(String name, double amount, bool isIwe) {
-    setState(() {
-      _debts.add(Debt(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        personName: name,
-        totalAmount: amount,
-        isIwe: isIwe,
-      ));
-    });
-    _saveData();
-  }
-
-  void _payDebt(Debt debt, double payAmount) {
-    if (payAmount <= 0) return;
-    setState(() {
-      debt.paidAmount += payAmount;
-      // Enregistrer le règlement comme transaction budget
-      _transactions.insert(
-        0,
-        Transaction(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          title: debt.isIwe ? 'Règlement Dette : ${debt.personName}' : 'Remboursement de : ${debt.personName}',
-          amount: payAmount,
-          date: DateTime.now(),
-          isIncome: !debt.isIwe, // Si on me rembourse = Entrée d'argent
-          category: 'Dette/Règlement',
-        ),
-      );
-    });
-    _saveData();
-  }
-
-  IconData _getCategoryIcon(String category) {
-    switch (category) {
-      case 'Pourboire':
-        return Icons.volunteer_activism;
-      case 'Repas':
-        return Icons.restaurant;
-      case 'Transport':
-        return Icons.directions_bus;
-      case 'Café/Tabac':
-        return Icons.local_cafe;
-      case 'Achat Perso':
-        return Icons.shopping_bag;
-      case 'Dette/Règlement':
-        return Icons.account_balance_wallet;
-      default:
-        return Icons.attach_money;
-    }
-  }
-
-  Color _getCategoryColor(String category) {
-    switch (category) {
-      case 'Repas':
-        return Colors.orange;
-      case 'Transport':
-        return Colors.blue;
-      case 'Café/Tabac':
-        return Colors.brown;
-      case 'Achat Perso':
-        return Colors.purple;
-      case 'Dette/Règlement':
-        return Colors.teal;
-      default:
-        return Colors.redAccent;
-    }
-  }
+class _WalletHomePageState extends State<WalletHomePage> {
+  int _selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('RAM WALLET', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-        centerTitle: true,
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.menu_book),
-            onPressed: _showDebtsModal,
-            tooltip: 'Gestion des Dettes',
+        title: const Text('RAM Wallet'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      ),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          const DashboardScreen(),
+          const AnalyticsScreen(),
+          const SettingsScreen(),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.account_balance_wallet),
+            label: 'Portefeuille',
           ),
-          IconButton(
-            icon: const Icon(Icons.bar_chart),
-            onPressed: _showStatsAndAnnualReportModal,
-            tooltip: 'Statistiques & Bilan Annuel',
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart),
+            label: 'Statistiques',
           ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _showSalarySettingsDialog,
-            tooltip: 'Configurer les salaires',
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Paramètres',
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Solde Net
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF00695C), Color(0xFF00897B)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.teal.withOpacity(0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
+    );
+  }
+}
+
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('SOLDE NET (RESTE À VIVRE)', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Solde Total',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
                   const SizedBox(height: 8),
-                  Text(
-                    '${netBalance.toStringAsFixed(0)} DA',
-                    style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                  const Text(
+                    '0.00 DZD',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  const Divider(color: Colors.white24, height: 24),
+                  const SizedBox(height: 20),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildHeaderInfo('Salaires', '${totalSalary.toStringAsFixed(0)} DA'),
-                      _buildHeaderInfo('Pourboires', '+${totalTips.toStringAsFixed(0)} DA'),
-                      _buildHeaderInfo('Dépenses', '-${totalExpenses.toStringAsFixed(0)} DA'),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Actions d'ajout
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade600,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.vertical: 14,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () => _showAddTransactionDialog(isIncome: true),
-                    icon: const Icon(Icons.add),
-                    label: const Text('+ Pourboire'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade600,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.vertical: 14,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () => _showAddTransactionDialog(isIncome: false),
-                    icon: const Icon(Icons.remove),
-                    label: const Text('- Dépense'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // Liste opérations
-            const Text(
-              'Aperçu des Opérations',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black80),
-            ),
-            const SizedBox(height: 10),
-            _transactions.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Text('Aucune opération enregistrée pour le moment.', style: TextStyle(color: Colors.grey.shade600)),
-                    ),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _transactions.length,
-                    itemBuilder: (ctx, index) {
-                      final tx = _transactions[index];
-                      return Dismissible(
-                        key: Key(tx.id),
-                        background: Container(
-                          color: Colors.red,
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20),
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: const Icon(Icons.delete, color: Colors.white),
-                        ),
-                        direction: DismissDirection.endToStart,
-                        onDismissed: (direction) => _deleteTransaction(tx.id),
-                        child: Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: tx.isIncome ? Colors.green.shade50 : Colors.red.shade50,
-                              child: Icon(_getCategoryIcon(tx.category), color: tx.isIncome ? Colors.green : Colors.red),
-                            ),
-                            title: Text(tx.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('${tx.category} • ${tx.date.day}/${tx.date.month}/${tx.date.year} ${tx.date.hour}:${tx.date.minute.toString().padLeft(2, '0')}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '${tx.isIncome ? '+' : '-'}${tx.amount.toStringAsFixed(0)} DA',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                    color: tx.isIncome ? Colors.green.shade700 : Colors.red.shade700,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.grey),
-                                  onPressed: () => _confirmDeleteDialog(tx.id),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeaderInfo(String label, String value) {
-    return Column(
-      children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-      ],
-    );
-  }
-
-  // --- Modal Gestion des Dettes ---
-  void _showDebtsModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.85,
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Gestion des Dettes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal)),
                       ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                        onPressed: () {
-                          _showAddDebtDialog(() => setModalState(() {}));
-                        },
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Nouvelle Dette'),
+                        onPressed: () {},
+                        icon: const Icon(Icons.add),
+                        label: const Text('Ajouter'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () {},
+                        icon: const Icon(Icons.send),
+                        label: const Text('Envoyer'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        ),
                       ),
                     ],
                   ),
-                  const Divider(),
-                  Expanded(
-                    child: _debts.isEmpty
-                        ? const Center(child: Text('Aucune dette enregistrée.'))
-                        : ListView.builder(
-                            itemCount: _debts.length,
-                            itemBuilder: (context, index) {
-                              final debt = _debts[index];
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(debt.personName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                          Chip(
-                                            label: Text(debt.isIwe ? 'Je dois' : 'On me doit', style: const TextStyle(color: Colors.white, fontSize: 11)),
-                                            backgroundColor: debt.isIwe ? Colors.red.shade400 : Colors.green.shade400,
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text('Total: ${debt.totalAmount.toStringAsFixed(0)} DA | Payé: ${debt.paidAmount.toStringAsFixed(0)} DA'),
-                                      const SizedBox(height: 4),
-                                      Text('Reste à régler: ${debt.remainingAmount.toStringAsFixed(0)} DA', style: TextStyle(fontWeight: FontWeight.bold, color: debt.isCleared ? Colors.green : Colors.red.shade700)),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
-                                        children: [
-                                          if (!debt.isCleared)
-                                            ElevatedButton(
-                                              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                                              onPressed: () {
-                                                _showPayDebtDialog(debt, () => setModalState(() {}));
-                                              },
-                                              child: const Text('Régler / Payer'),
-                                            ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete, color: Colors.grey),
-                                            onPressed: () {
-                                              setState(() => _debts.removeAt(index));
-                                              _saveData();
-                                              setModalState(() {});
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
                 ],
               ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showAddDebtDialog(VoidCallback onUpdate) {
-    final nameController = TextEditingController();
-    final amountController = TextEditingController();
-    bool isIwe = true;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Ajouter une Dette / Créance'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Nom de la personne')),
-              const SizedBox(height: 8),
-              TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Montant Total (DA)')),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  ChoiceChip(
-                    label: const Text('Je dois'),
-                    selected: isIwe,
-                    onSelected: (val) => setDialogState(() => isIwe = true),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('On me doit'),
-                    selected: !isIwe,
-                    onSelected: (val) => setDialogState(() => isIwe = false),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-            ElevatedButton(
-              onPressed: () {
-                final amt = double.tryParse(amountController.text) ?? 0.0;
-                if (nameController.text.isNotEmpty && amt > 0) {
-                  _addDebt(nameController.text.trim(), amt, isIwe);
-                  onUpdate();
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Ajouter'),
+          const SizedBox(height: 24),
+          Text(
+            'Dernières Transactions',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showPayDebtDialog(Debt debt, VoidCallback onUpdate) {
-    final payController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Règlement pour ${debt.personName}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Reste à régler: ${debt.remainingAmount.toStringAsFixed(0)} DA'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: payController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Montant versé aujourd\'hui (DA)'),
+          ),
+          const SizedBox(height: 12),
+          const Padding(
+            padding: EdgeInsets.all(20),
+            child: Center(
+              child: Text('Aucune dépense enregistrée cette année.'),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-          ElevatedButton(
-            onPressed: () {
-              final amt = double.tryParse(payController.text) ?? 0.0;
-              if (amt > 0) {
-                _payDebt(debt, amt);
-                onUpdate();
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('Valider le Règlement'),
           ),
         ],
       ),
     );
   }
+}
 
-  // --- Modal Statistiques & Bilan Annuel ---
-  void _showStatsAndAnnualReportModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final annualTx = _transactions.where((tx) => tx.date.year == _selectedYear).toList();
-            final annualTips = annualTx.where((tx) => tx.isIncome).fold(0.0, (sum, tx) => sum + tx.amount);
-            final annualExpenses = annualTx.where((tx) => !tx.isIncome).fold(0.0, (sum, tx) => sum + tx.amount);
-            final annualSalaryTotal = totalSalary * 12;
-            final annualNet = (annualSalaryTotal + annualTips) - annualExpenses;
+class AnalyticsScreen extends StatelessWidget {
+  const AnalyticsScreen({super.key});
 
-            Map<String, double> categoryTotals = {};
-            for (var tx in annualTx.where((tx) => !tx.isIncome)) {
-              categoryTotals[tx.category] = (categoryTotals[tx.category] ?? 0.0) + tx.amount;
-            }
-
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.85,
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Statistiques & Bilan', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.teal)),
-                      DropdownButton<int>(
-                        value: _selectedYear,
-                        items: [2024, 2025, 2026, 2027].map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
-                        onChanged: (val) {
-                          if (val != null) setModalState(() => _selectedYear = val);
-                        },
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 10),
-                          Text('Bilan Annuel $_selectedYear', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(15)),
-                            child: Column(
-                              children: [
-                                _buildReportRow('Salaires Annuels (Estimés)', '${annualSalaryTotal.toStringAsFixed(0)} DA', Colors.black),
-                                const SizedBox(height: 6),
-                                _buildReportRow('Total Pourboires', '+${annualTips.toStringAsFixed(0)} DA', Colors.green.shade700),
-                                const SizedBox(height: 6),
-                                _buildReportRow('Total Dépenses', '-${annualExpenses.toStringAsFixed(0)} DA', Colors.red.shade700),
-                                const Divider(height: 16),
-                                _buildReportRow('Bilan Annuel Net', '${annualNet.toStringAsFixed(0)} DA', Colors.teal.shade900, isBold: true),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 25),
-                          const Text('Répartition des Dépenses', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 15),
-                          categoryTotals.isEmpty
-                              ? const Center(padding: EdgeInsets.all(20), child: Text('Aucune dépense enregistrée cette année.'))
-                              : SizedBox(
-                                  height: 200,
-                                  child: PieChart(
-                                    PieChartData(
-                                      sectionsSpace: 2,
-                                      centerSpaceRadius: 40,
-                                      sections: categoryTotals.entries.map((entry) {
-                                        return PieChartSectionData(
-                                          color: _getCategoryColor(entry.key),
-                                          value: entry.value,
-                                          title: '${((entry.value / (annualExpenses > 0 ? annualExpenses : 1)) * 100).toStringAsFixed(0)}%',
-                                          radius: 50,
-                                          titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ),
-                                ),
-                          const SizedBox(height: 15),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 8,
-                            children: categoryTotals.keys.map((cat) {
-                              return Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(width: 12, height: 12, color: _getCategoryColor(cat)),
-                                  const SizedBox(width: 6),
-                                  Text('$cat (${categoryTotals[cat]!.toStringAsFixed(0)} DA)', style: const TextStyle(fontSize: 12)),
-                                ],
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text(
+        'Statistiques à venir',
+        style: TextStyle(fontSize: 18, color: Colors.grey),
+      ),
     );
   }
+}
 
-  Widget _buildReportRow(String title, String amount, Color color, {bool isBold = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(title, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
-        Text(amount, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.w600, color: color, fontSize: 14)),
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16.0),
+      children: const [
+        ListTile(
+          leading: Icon(Icons.person),
+          title: Text('Profil'),
+        ),
+        ListTile(
+          leading: Icon(Icons.security),
+          title: Text('Sécurité'),
+        ),
+        ListTile(
+          leading: Icon(Icons.info),
+          title: Text('À propos'),
+          subtitle: Text('RAM Wallet v1.0.0'),
+        ),
       ],
-    );
-  }
-
-  void _showAddTransactionDialog({required bool isIncome}) {
-    final amountController = TextEditingController();
-    final noteController = TextEditingController();
-    String selectedCategory = isIncome ? 'Pourboire' : 'Repas';
-    DateTime selectedDate = DateTime.now();
-
-    final categories = isIncome
-        ? ['Pourboire', 'Autre']
-        : ['Repas', 'Transport', 'Café/Tabac', 'Achat Perso', 'Autre'];
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(isIncome ? 'Ajouter un Pourboire' : 'Ajouter une Dépense'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: amountController,
-                  keyboardType: TextInputType.number,
-                  autofocus: true,
-                  decoration: const InputDecoration(labelText: 'Montant (DA)', prefixIcon: Icon(Icons.attach_money)),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: noteController,
-                  decoration: const InputDecoration(labelText: 'Note (ex: Oubli hier)', prefixIcon: Icon(Icons.note)),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  items: categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
-                  onChanged: (val) => setDialogState(() => selectedCategory = val!),
-                  decoration: const InputDecoration(labelText: 'Catégorie'),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today, size: 20, color: Colors.teal),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text('Date : ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}', style: const TextStyle(fontSize: 13))),
-                    TextButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: selectedDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                        );
-                        if (picked != null) setDialogState(() => selectedDate = picked);
-                      },
-                      child: const Text('Modifier'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: isIncome ? Colors.green : Colors.red, foregroundColor: Colors.white),
-              onPressed: () {
-                final amount = double.tryParse(amountController.text) ?? 0.0;
-                if (amount > 0) {
-                  _addTransaction(noteController.text.trim(), amount, isIncome, selectedCategory, selectedDate);
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Ajouter'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _confirmDeleteDialog(String id) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer l\'opération'),
-        content: const Text('Voulez-vous vraiment effacer cette ligne ?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () {
-              _deleteTransaction(id);
-              Navigator.pop(context);
-            },
-            child: const Text('Supprimer'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSalarySettingsDialog() {
-    final s4Controller = TextEditingController(text: salary4th > 0 ? salary4th.toStringAsFixed(0) : '');
-    final s14Controller = TextEditingController(text: salary14th > 0 ? salary14th.toStringAsFixed(0) : '');
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Réglage des Salaires'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: s4Controller, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Salaire du 4 du mois (DA)')),
-            const SizedBox(height: 12),
-            TextField(controller: s14Controller, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Salaire du 14 du mois (DA)')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                salary4th = double.tryParse(s4Controller.text) ?? 0.0;
-                salary14th = double.tryParse(s14Controller.text) ?? 0.0;
-              });
-              _saveData();
-              Navigator.pop(context);
-            },
-            child: const Text('Enregistrer'),
-          ),
-        ],
-      ),
     );
   }
 }
