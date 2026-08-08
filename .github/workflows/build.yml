@@ -24,6 +24,15 @@ jobs:
           flutter-version: '3.19.x'
           channel: 'stable'
 
+      # ÉTAPE IMPORTANTE : Créer la structure Android
+      - name: Create Android project structure
+        run: |
+          flutter create --platforms=android --project-name=ram_wallet .
+          # On garde nos fichiers Dart et on supprime ceux créés par défaut
+          rm -rf lib/main.dart
+          # On recrée la structure de dossiers
+          mkdir -p lib/models lib/screens lib/services lib/widgets
+
       - name: Get dependencies
         run: flutter pub get
 
