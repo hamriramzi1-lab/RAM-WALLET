@@ -1,22 +1,54 @@
 name: ram_wallet
-description: "RAM Wallet & Wardrobe App"
+description: Application de gestion de portefeuille et garde-robe intelligente
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.2.0 <4.0.0'
+  flutter: '>=3.16.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  shared_preferences: ^2.2.2
-  cupertino_icons: ^1.0.6
+  
+  # Stockage local
+  shared_preferences: ^2.2.3
+  
+  # Formatage des dates et nombres
+  intl: ^0.19.0
+  
+  # Icônes supplémentaires
+  cupertino_icons: ^1.0.8
+  
+  # Pour la gestion des erreurs et logs (optionnel mais recommandé)
+  # logger: ^2.0.2
+  
+  # Pour les animations fluides (optionnel)
+  # flutter_staggered_animations: ^1.1.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  
+  # Lints et règles de qualité
+  flutter_lints: ^4.0.0
+  
+  # Analyse de code avancée (optionnel)
+  # dart_code_metrics: ^5.7.6
 
 flutter:
   uses-material-design: true
+  
+  # Assets (images, icônes, etc.)
+  # assets:
+  #   - assets/images/
+  #   - assets/icons/
+  #   - assets/fonts/
+  
+  # Polices personnalisées (optionnel)
+  # fonts:
+  #   - family: CustomFont
+  #     fonts:
+  #       - asset: assets/fonts/CustomFont-Regular.ttf
+  #       - asset: assets/fonts/CustomFont-Bold.ttf
+  #         weight: 700
