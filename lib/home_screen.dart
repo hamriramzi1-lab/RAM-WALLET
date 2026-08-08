@@ -1,6 +1,3 @@
-// lib/screens/home_screen.dart
-// Écran d'accueil - Affiche le solde et les transactions
-
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:intl/intl.dart';
@@ -22,13 +19,11 @@ class _HomeScreenState extends State<HomeScreen> {
   final StorageService _storage = StorageService();
   final Uuid _uuid = const Uuid();
 
-  // Données
   List<Transaction> _transactions = [];
   List<Debt> _debts = [];
   double _balance = 0.0;
   int _currentIndex = 0;
 
-  // Configuration des salaires
   double _salary1 = 0.0;
   double _salary2 = 0.0;
   DateTime? _salary1Date;
@@ -39,10 +34,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadAllData();
   }
-
-  // ==========================================
-  // CHARGER TOUTES LES DONNÉES
-  // ==========================================
 
   Future<void> _loadAllData() async {
     final transactions = await _storage.loadTransactions();
@@ -67,10 +58,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // ==========================================
-  // SAUVEGARDER TOUTES LES DONNÉES
-  // ==========================================
-
   Future<void> _saveAllData() async {
     await _storage.saveTransactions(_transactions);
     await _storage.saveDebts(_debts);
@@ -82,18 +69,14 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // ==========================================
-  // AJOUTER UNE TRANSACTION
-  // ==========================================
-
-  void _addTransaction(String title, double amount, String type, String category) {
+  void _addTransaction(String title, double amount, String type, String category, DateTime date) {
     final transaction = Transaction(
       id: _uuid.v4(),
       title: title,
       amount: amount,
       type: type,
       category: category,
-      date: DateTime.now(),
+      date: date,
     );
 
     setState(() {
@@ -103,10 +86,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _saveAllData();
     _showSnackBar('${type == 'income' ? 'Revenu' : 'Dépense'} ajouté(e)');
   }
-
-  // ==========================================
-  // SUPPRIMER UNE TRANSACTION
-  // ==========================================
 
   void _deleteTransaction(int index) {
     final tx = _transactions[index];
@@ -139,15 +118,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==========================================
-  // DIALOGUE AJOUT TRANSACTION
-  // ==========================================
-
   void _showAddTransactionDialog() {
     final titleController = TextEditingController();
     final amountController = TextEditingController();
     String type = 'expense';
     String category = 'Autre';
+    DateTime selectedDate = DateTime.now();
 
     showDialog(
       context: context,
@@ -189,6 +165,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
+                ListTile(
+                  leading: const Icon(Icons.calendar_today),
+                  title: Text(DateFormat('dd/MM/yyyy').format(selectedDate)),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      setDialogState(() => selectedDate = date);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -219,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () {
                 final amt = double.tryParse(amountController.text) ?? 0.0;
                 if (titleController.text.isNotEmpty && amt > 0) {
-                  _addTransaction(titleController.text, amt, type, category);
+                  _addTransaction(titleController.text, amt, type, category, selectedDate);
                   Navigator.pop(context);
                 }
               },
@@ -231,9 +223,79 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==========================================
-  // AFFICHER UN MESSAGE (SnackBar)
-  // ==========================================
+  void _showSalaryDialog() {
+    final salary1Controller = TextEditingController(text: _salary1.toString());
+    final salary2Controller = TextEditingController(text: _salary2.toString());
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('💰 Gestion des salaires'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Salaire 1 (4 du mois)'),
+              TextField(
+                controller: salary1Controller,
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Montant (DZD)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text('Salaire 2 (14 du mois)'),
+              TextField(
+                controller: salary2Controller,
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Montant (DZD)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _salary1 = double.tryParse(salary1Controller.text) ?? 0.0;
+                _salary2 = double.tryParse(salary2Controller.text) ?? 0.0;
+                _salary1Date = DateTime(DateTime.now().year, DateTime.now().month, 4);
+                _salary2Date = DateTime(DateTime.now().year, DateTime.now().month, 14);
+              });
+              _saveAllData();
+              Navigator.pop(context);
+              _showSnackBar('Salaires enregistrés !');
+            },
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getNextSalaryDate() {
+    final now = DateTime.now();
+    final day = now.day;
+    
+    if (_salary1Date != null && day < 4) {
+      return '4/${now.month}/${now.year}';
+    } else if (_salary2Date != null && day < 14) {
+      return '14/${now.month}/${now.year}';
+    } else if (_salary1Date != null) {
+      final nextMonth = now.month + 1 > 12 ? 1 : now.month + 1;
+      final nextYear = now.month + 1 > 12 ? now.year + 1 : now.year;
+      return '4/$nextMonth/$nextYear';
+    }
+    return 'Non configuré';
+  }
 
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -243,10 +305,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  // ==========================================
-  // BUILD PRINCIPAL
-  // ==========================================
 
   @override
   Widget build(BuildContext context) {
@@ -263,6 +321,12 @@ class _HomeScreenState extends State<HomeScreen> {
             : (_currentIndex == 1 ? 'Statistiques' : 'Dettes')),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          if (_currentIndex == 0)
+            IconButton(
+              icon: const Icon(Icons.attach_money),
+              onPressed: _showSalaryDialog,
+              tooltip: 'Gérer les salaires',
+            ),
           if (_currentIndex == 0)
             IconButton(
               icon: const Icon(Icons.add_card),
@@ -293,17 +357,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==========================================
-  // PAGE ACCUEIL
-  // ==========================================
-
   Widget _buildHomePage() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Carte du solde
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -354,9 +413,38 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           
+          const SizedBox(height: 12),
+          
+          // Salaires
+          if (_salary1 > 0 || _salary2 > 0) ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '💰 Salaires du mois',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_salary1 > 0)
+                      Text('• 4 du mois: ${_salary1.toStringAsFixed(2)} DZD'),
+                    if (_salary2 > 0)
+                      Text('• 14 du mois: ${_salary2.toStringAsFixed(2)} DZD'),
+                    const SizedBox(height: 4),
+                    Text(
+                      '📅 Prochain salaire: ${_getNextSalaryDate()}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          
           const SizedBox(height: 24),
           
-          // Liste des transactions
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
