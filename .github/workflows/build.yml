@@ -26,7 +26,7 @@ jobs:
           channel: 'stable'
 
       - name: Generate Android project structure
-        run: flutter create . --platforms=android
+        run: flutter create . --platforms=android --project-name=ram_wallet
 
       - name: Get dependencies
         run: flutter pub get
@@ -39,3 +39,4 @@ jobs:
         with:
           name: ram-wallet-app
           path: build/app/outputs/flutter-apk/app-debug.apk
+          
