@@ -298,6 +298,57 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Non configuré';
   }
 
+  // ==========================================
+  // CUMUL JOURNALIER
+  // ==========================================
+
+  Map<String, Map<String, double>> _getDailySummary() {
+    final Map<String, Map<String, double>> dailyTotals = {};
+    final now = DateTime.now();
+    
+    for (int i = 0; i < 7; i++) {
+      final date = now.subtract(Duration(days: i));
+      final key = DateFormat('yyyy-MM-dd').format(date);
+      final displayKey = DateFormat('dd/MM').format(date);
+      
+      double totalIncome = 0.0;
+      double totalExpense = 0.0;
+      
+      for (var tx in _transactions) {
+        final txDate = DateFormat('yyyy-MM-dd').format(tx.date);
+        if (txDate == key) {
+          if (tx.type == 'income') {
+            totalIncome += tx.amount;
+          } else {
+            totalExpense += tx.amount;
+          }
+        }
+      }
+      
+      dailyTotals[displayKey] = {
+        'income': totalIncome,
+        'expense': totalExpense,
+        'net': totalIncome - totalExpense,
+      };
+    }
+    
+    return dailyTotals;
+  }
+
+  String _getDayName(String date) {
+    try {
+      final parts = date.split('/');
+      final month = int.parse(parts[0]);
+      final day = int.parse(parts[1]);
+      final now = DateTime.now();
+      final dateTime = DateTime(now.year, month, day);
+      final weekdays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+      return weekdays[dateTime.weekday - 1];
+    } catch (e) {
+      return '';
+    }
+  }
+
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -444,6 +495,111 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
           
+          const SizedBox(height: 16),
+
+          // ==========================================
+          // CUMUL JOURNALIER (NOUVEAU)
+          // ==========================================
+          
+          const Text(
+            '📊 Cumul des 7 derniers jours',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                children: _getDailySummary().entries.map((entry) {
+                  final date = entry.key;
+                  final data = entry.value;
+                  final income = data['income'] ?? 0.0;
+                  final expense = data['expense'] ?? 0.0;
+                  final net = data['net'] ?? 0.0;
+                  final netColor = net >= 0 ? Colors.green.shade700 : Colors.red.shade700;
+                  final dayName = _getDayName(date);
+                  
+                  return Container(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Colors.grey.shade200,
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Date + Jour
+                        Expanded(
+                          flex: 2,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                date,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              Text(
+                                dayName,
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Revenus
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '+ ${income.toStringAsFixed(2)} DZD',
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        // Dépenses
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '- ${expense.toStringAsFixed(2)} DZD',
+                            style: TextStyle(
+                              color: Colors.red.shade700,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        // Net
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '${net >= 0 ? '+' : ''}${net.toStringAsFixed(2)} DZD',
+                            style: TextStyle(
+                              color: netColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          
           const SizedBox(height: 24),
           
           Row(
@@ -522,7 +678,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           
-          // ✅ BOUTON MODIFIÉ ICI
           if (_transactions.length > 10)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
