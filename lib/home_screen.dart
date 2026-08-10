@@ -522,12 +522,38 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           
+          // ✅ BOUTON MODIFIÉ ICI
           if (_transactions.length > 10)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Text(
-                '+ ${_transactions.length - 10} autres transactions',
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AllTransactionsScreen(
+                        transactions: _transactions,
+                      ),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurple.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '📂 Voir toutes les transactions (${_transactions.length})',
+                      style: TextStyle(
+                        color: Colors.deepPurple.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
         ],
